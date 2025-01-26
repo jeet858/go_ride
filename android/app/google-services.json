@@ -2,12 +2,12 @@
   "project_info": {
     "project_number": "466368948951",
     "project_id": "goride-5c7a7",
-    "storage_bucket": "goride-5c7a7.appspot.com"
+    "storage_bucket": "goride-5c7a7.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:466368948951:android:d0bb4b94ec1b3cdf7fde92",
+        "mobilesdk_app_id": "1:466368948951:android:9813eab911a0af7f7fde92",
         "android_client_info": {
           "package_name": "com.mindstar.go_ride"
         }

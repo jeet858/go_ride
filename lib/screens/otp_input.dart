@@ -2,6 +2,8 @@ import 'dart:developer';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:go_ride/controllers/firebase.dart';
+import 'package:go_ride/controllers/login.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_ride/widgets/custom_button.dart';
 
@@ -17,7 +19,7 @@ class OtpInput extends StatefulWidget {
 class _OtpInputState extends State<OtpInput> {
   @override
   Widget build(BuildContext context) {
-    final Map<String, dynamic> arguments =
+    final arguments =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>;
     final phoneNumber = arguments['phoneNumber'] ?? '';
 
@@ -60,22 +62,9 @@ class _OtpInputState extends State<OtpInput> {
               ),
               CustomButton(
                 onPressed: () async {
-                  // try {
-                  //   final cred = PhoneAuthProvider.credential(
-                  //       verificationId: '+91$phoneNumber',
-                  //       smsCode: otpController.text);
-                  //
-                  //   await FirebaseAuth.instance.signInWithCredential(cred);
-                  //
-                  //   print('login successful');
-                  // } catch (e) {
-                  //   log(e.toString());
-                  // }
-                  // print(
-                  //     "OTP entered and button pressed: ${otpController.text}");
-                  Navigator.pushNamed(context, 'map', arguments: {
-
-                  });
+                  await UserPreferences.instance.saveLogin(phoneNumber);
+                  Navigator.pushNamed(context, 'map',
+                      arguments: {'phoneNumber': phoneNumber});
                 },
               ),
             ],

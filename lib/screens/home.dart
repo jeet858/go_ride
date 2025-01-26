@@ -3,8 +3,11 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:go_ride/controllers/firebase.dart';
+import 'package:go_ride/controllers/login.dart';
 import 'package:go_ride/widgets/custom_bottom_appbar.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_ride/constants.dart';
@@ -12,7 +15,6 @@ import 'package:go_ride/widgets/custom_button.dart';
 import 'package:go_ride/widgets/maps.dart';
 import 'package:mappls_gl/mappls_gl.dart';
 import 'package:mappls_place_widget/mappls_place_widget.dart';
-
 import '../utils/polyline.dart';
 
 class Home extends StatefulWidget {
@@ -29,15 +31,12 @@ class _HomeState extends State<Home> {
     target: LatLng(25.321684, 82.987289),
     zoom: 14.0,
   );
-  static const String accessToken = "";
-  static const String restApiKey = "";
-  static const String atlasClientId =
-      "";
-  static const String atlasClientSecret =
-      "";
+  static String? accessToken = dotenv.env['ACCESS_TOKEN'];
+  static String? restApiKey = dotenv.env['REST_API_KEY'];
+  static String? atlasClientId = dotenv.env['ATLAS_CLIENT_ID'];
+  static String? atlasClientSecret = dotenv.env['ATLAS_CLIENT_SECRECT'];
   late MapplsMapController controller;
-
-
+  late double _distance;
   late LatLng originLatLng;
   late LatLng destinationLatLng;
   LatLng currentLocation = const LatLng(25.321684, 82.987289);
@@ -53,6 +52,7 @@ class _HomeState extends State<Home> {
   bool _isOriginSelected = false;
   String pickupPlaceName = '';
   String destinationPlaceName = '';
+  final TextEditingController _fareController = TextEditingController();
   openMapplsPlacePickerWidget() async {
     ReverseGeocodePlace place;
     // Platform messages may fail, so we use a try/catch PlatformException.
@@ -82,7 +82,6 @@ class _HomeState extends State<Home> {
         _origin = place;
         _isOriginSelected = true;
       });
-
     } else {
       setState(() {
         _destination = place;
@@ -127,26 +126,46 @@ class _HomeState extends State<Home> {
     controller.easeCamera(CameraUpdate.newLatLngZoom(
         LatLng(_origin.latitude!.toDouble(), _origin.longitude!.toDouble()),
         14));
-    print(place.toJson());
+    print({'origin': place.toJson()});
   }
 
   openDestinationPickupWidget() async {
     ReverseGeocodePlace place;
     // Platform messages may fail, so we use a try/catch PlatformException.
     try {
-      place = await openPlacePicker(PickerOption(
-          includeDeviceLocationButton: true,
-          showMarkerShadow: false,
-          includeSearch: true,
-          pickerButtonBackgroundColor: '#4D1B6A',
-          placeOptions: PlaceOptions(
-            isShowCurrentLocation: true,
-          )));
+      if (_destination.longitude != null && _destination.latitude != null) {
+        place = await openPlacePicker(
+          PickerOption(
+            includeDeviceLocationButton: true,
+            showMarkerShadow: false,
+            includeSearch: true,
+            pickerButtonBackgroundColor: '#4D1B6A',
+            statingCameraPosition: CameraPosition(
+              target: LatLng(_destination.latitude as double,
+                  _destination.longitude as double),
+            ),
+            placeOptions: PlaceOptions(
+                isShowCurrentLocation: true, hint: "Select Destination"),
+          ),
+        );
+      } else {
+        place = await openPlacePicker(
+          PickerOption(
+            includeDeviceLocationButton: true,
+            showMarkerShadow: false,
+            includeSearch: true,
+            pickerButtonBackgroundColor: '#4D1B6A',
+            placeOptions: PlaceOptions(
+              isShowCurrentLocation: true,
+            ),
+          ),
+        );
+      }
     } on PlatformException {
       place = ReverseGeocodePlace();
     }
     if (kDebugMode) {
-      print(json.encode(place.toJson()));
+      print({'destination': place.toJson()});
     }
 
     // If the widget was removed from the tree while the asynchronous platform
@@ -162,7 +181,6 @@ class _HomeState extends State<Home> {
               _destination.longitude!.toDouble()),
           "car-icon",
           "assets/images/car-icon.png");
-
     });
     callDirection(
         LatLng(_origin.latitude!.toDouble(), _origin.longitude!.toDouble()),
@@ -222,8 +240,8 @@ class _HomeState extends State<Home> {
   void addMarker(
       LatLng coordinates, String markerName, String assetName) async {
     await addImageFromAsset(markerName, assetName);
-    controller.addSymbol(
-        SymbolOptions(geometry: coordinates, iconImage: markerName, iconSize: 1));
+    controller.addSymbol(SymbolOptions(
+        geometry: coordinates, iconImage: markerName, iconSize: 1));
   }
 
   void drawPath(List<LatLng> latlngList) {
@@ -279,6 +297,10 @@ class _HomeState extends State<Home> {
           directionResponse.routes!.length > 0) {
         setState(() {
           route = directionResponse.routes![0];
+          _distance = directionResponse.routes![0].distance!;
+          if (kDebugMode) {
+            print({'route': directionResponse.routes![0].distance});
+          }
         });
         Polyline polyline = Polyline.Decode(
             encodedString: directionResponse.routes![0].geometry, precision: 6);
@@ -293,7 +315,10 @@ class _HomeState extends State<Home> {
           directionResponse.waypoints?.forEach((element) {
             if (imageCounter == 1) {
               symbols.add(
-                SymbolOptions(geometry: element.location, iconImage: 'icon', iconSize:10),
+                SymbolOptions(
+                    geometry: element.location,
+                    iconImage: 'icon',
+                    iconSize: 10),
               );
               imageCounter++;
             } else {
@@ -319,18 +344,25 @@ class _HomeState extends State<Home> {
     // TODO: implement initState
     super.initState();
 
-    MapplsAccountManager.setMapSDKKey(accessToken);
-    MapplsAccountManager.setRestAPIKey(restApiKey);
-    MapplsAccountManager.setAtlasClientId(atlasClientId);
-    MapplsAccountManager.setAtlasClientSecret(atlasClientSecret);
+    MapplsAccountManager.setMapSDKKey(accessToken!);
+    MapplsAccountManager.setRestAPIKey(restApiKey!);
+    MapplsAccountManager.setAtlasClientId(atlasClientId!);
+    MapplsAccountManager.setAtlasClientSecret(atlasClientSecret!);
     _getCurrentLocation();
   }
 
   @override
   Widget build(BuildContext context) {
+    final Map<String, dynamic>? arguments =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final phoneNumber =
+        arguments != null && arguments.containsKey('phoneNumber')
+            ? arguments['phoneNumber'] as String
+            : null;
+    final String savedPhoneNumber = UserPreferences.instance.phoneNumber;
     return SafeArea(
       child: Scaffold(
-        body: Container(
+        body: SizedBox(
           height: double.infinity,
           child: Stack(
             children: [
@@ -353,7 +385,6 @@ class _HomeState extends State<Home> {
                               "assets/images/custom-icon.png"),
                         },
                         onMapClick: (lat, lng) async {
-
                           controller.easeCamera(CameraUpdate.newLatLngZoom(
                               LatLng(lng.latitude, lng.longitude), 14));
                         },
@@ -513,11 +544,12 @@ class _HomeState extends State<Home> {
                               height: 50,
                               child: Center(
                                 child: Text(
-                                  pickupPlaceName.isNotEmpty?pickupPlaceName:'Current Location  ',
+                                  pickupPlaceName.isNotEmpty
+                                      ? pickupPlaceName
+                                      : 'Current Location  ',
                                   style: const TextStyle(
-                                    color: kPrimaryColor,
-                                    overflow: TextOverflow.clip
-                                  ),
+                                      color: kPrimaryColor,
+                                      overflow: TextOverflow.clip),
                                 ),
                               ),
                             ),
@@ -555,16 +587,16 @@ class _HomeState extends State<Home> {
                               height: 50,
                               child: Center(
                                 child: Text(
-                                  destinationPlaceName.isNotEmpty?destinationPlaceName:'Select Destination',
+                                  destinationPlaceName.isNotEmpty
+                                      ? destinationPlaceName
+                                      : 'Select Destination',
                                   style: const TextStyle(
-                                      color: kPrimaryColor,
-                                      overflow: TextOverflow.clip,
+                                    color: kPrimaryColor,
+                                    overflow: TextOverflow.clip,
                                   ),
-
                                 ),
                               ),
                             ),
-
                             Container(
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 10),
@@ -582,7 +614,6 @@ class _HomeState extends State<Home> {
                         ),
                       ),
                       const SizedBox(height: 10),
-
                       Container(
                         height: 40,
                         width: double.infinity,
@@ -595,6 +626,7 @@ class _HomeState extends State<Home> {
                         ),
                         child: TextField(
                           keyboardType: TextInputType.number,
+                          controller: _fareController,
                           decoration: InputDecoration(
                             hintText: 'Offer Your fare',
                             contentPadding:
@@ -615,8 +647,13 @@ class _HomeState extends State<Home> {
                       ),
                       CustomButton(
                         onPressed: () {
-                          print(_origin.toJson());
-                          print(_destination.toJson());
+                          bookACab(
+                              phoneNumber ?? savedPhoneNumber as String,
+                              _origin,
+                              _destination,
+                              _fareController.text,
+                              _distance);
+                          Navigator.pushNamed(context, 'offers');
                         },
                         backgroundColor: kPrimaryColor,
                         buttonText: 'Find a Driver',
